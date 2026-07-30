@@ -13,9 +13,14 @@ function detectLanguage(policies) {
   return Object.hasOwn(policies, short) ? short : "en";
 }
 
-function renderPolicy(locale, policies) {
+function renderPolicy(locale, policies, billingPolicies) {
   const policy = policies[locale];
-  const paragraphs = policy.body.split("\n\n");
+  const billingPolicy = billingPolicies[locale];
+  const paragraphs = [
+    billingPolicy.updated,
+    ...policy.body.split("\n\n").slice(1),
+    billingPolicy.billing,
+  ];
   document.documentElement.lang = locale;
   document.title = `VideoVault | ${policy.title}`;
   titleElement.textContent = policy.title;
@@ -45,12 +50,16 @@ function renderPolicy(locale, policies) {
   });
 }
 
-fetch("./policies.json")
-  .then((response) => {
-    if (!response.ok) throw new Error(`Unable to load policies: ${response.status}`);
-    return response.json();
+Promise.all([
+  fetch("./policies.json"),
+  fetch("./billing-policies.json"),
+])
+  .then(async ([policiesResponse, billingResponse]) => {
+    if (!policiesResponse.ok) throw new Error(`Unable to load policies: ${policiesResponse.status}`);
+    if (!billingResponse.ok) throw new Error(`Unable to load billing policy: ${billingResponse.status}`);
+    return [await policiesResponse.json(), await billingResponse.json()];
   })
-  .then((policies) => {
+  .then(([policies, billingPolicies]) => {
     Object.entries(policies).forEach(([key, policy]) => {
       const option = document.createElement("option");
       option.value = key;
@@ -59,8 +68,8 @@ fetch("./policies.json")
     });
     const initialLanguage = detectLanguage(policies);
     languageSelect.value = initialLanguage;
-    renderPolicy(initialLanguage, policies);
-    languageSelect.addEventListener("change", () => renderPolicy(languageSelect.value, policies));
+    renderPolicy(initialLanguage, policies, billingPolicies);
+    languageSelect.addEventListener("change", () => renderPolicy(languageSelect.value, policies, billingPolicies));
   })
   .catch(() => {
     const section = document.createElement("section");
